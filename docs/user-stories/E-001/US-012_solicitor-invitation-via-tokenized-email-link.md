@@ -1,0 +1,38 @@
+---
+id: "3b0c53e0-dbde-4204-b3ee-207c5a2abb51"
+project_id: "7ec165f4-2fa3-41b0-9546-4a26acd35cef"
+epic_id: "e009c821-b0e0-4cb8-b623-cb1b8599e6e5"
+code: "US-012"
+title: "Solicitor Invitation via Tokenized Email Link"
+priority: "must"
+effort_estimate: "L"
+status: "approved"
+order: "11"
+version: "1"
+created_at: "2026-05-06 11:11:48.948337+00"
+updated_at: "2026-05-06 11:18:44.762116+00"
+---
+
+# US-012: Solicitor Invitation via Tokenized Email Link
+
+**Epic:** [E-001: User Authentication & Role-Based Access Control](../../epics/E-001_user-authentication-role-based-access-control.md)  
+**Priority:** must  
+**Effort Estimate:** L  
+**Status:** approved  
+**Order:** 11  
+**Version:** 1
+
+## User Story
+
+As a **Organization Admin**, I want to invite Solicitors to the platform via email so that they receive a secure, tokenized signup link so that only authorized individuals can join my organization and I do not need to manually create their accounts.
+
+## Acceptance Criteria
+
+- Given I am logged in as Organization Admin, when I enter a solicitor's email address and submit the invite form, then a unique tokenized invitation link is generated and an email is sent to that address
+- Given an invitation email is sent, when the solicitor clicks the link within 72 hours, then they are directed to a registration page to set their name and password
+- Given an invitation token has expired (after 72 hours), when the solicitor clicks the link, then they see an error message stating the link has expired and are prompted to request a new invitation
+- Given the same invitation email is sent twice, when the first link is used to complete registration, then the second link is automatically invalidated
+- Given a solicitor has not completed registration, when they attempt to log in, then access is denied and they are prompted to complete signup via their invitation link
+- Given a solicitor completes registration via the invitation link, when they first log in, then they are automatically scoped to the inviting organization with the Solicitor role
+- Given I am logged in as Organization Admin, when I view the solicitor management page, then I can see the invitation status (Pending / Active) for each solicitor
+
