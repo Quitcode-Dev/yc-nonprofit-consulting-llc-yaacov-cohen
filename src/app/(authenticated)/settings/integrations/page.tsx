@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import { CsvImportWizard } from '@/components/import/csv-import-wizard';
+import { ImportHistory } from '@/components/import/import-history';
 
 type ConnectionStatus = 'connected' | 'invalid_key' | 'connection_failed' | 'unknown' | 'loading';
 
@@ -315,6 +316,23 @@ export default function IntegrationsSettingsPage() {
               <FileUp className="h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">Loading…</p>
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Import History ─────────────────────────────────────────────────── */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Import History</CardTitle>
+          <CardDescription>
+            The last 10 import and sync results for your organization.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {orgId ? (
+            <ImportHistory orgId={orgId} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Loading…</p>
           )}
         </CardContent>
       </Card>
