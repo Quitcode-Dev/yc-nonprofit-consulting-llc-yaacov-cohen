@@ -2,6 +2,102 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthenticatedUser, assertRole, AuthorizationError } from '@/lib/auth/authorize';
 
+export async function GET(request: NextRequest) {
+  // 1. Authenticate & authorise
+  let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
+  let user: Awaited<ReturnType<typeof getAuthenticatedUser>>['user'];
+
+  try {
+    const auth = await getAuthenticatedUser(request);
+    user = auth.user;
+    profile = auth.profile;
+    assertRole(profile, ['org_admin', 'super_admin', 'solicitor']);
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const organizationId = profile.organization_id;
+  if (!organizationId) {
+    return NextResponse.json({ error: 'No organization associated with this account' }, { status: 400 });
+  }
+
+  // 2. Parse query params
+  const { searchParams } = new URL(request.url);
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
+  const perPage = [25, 50].includes(parseInt(searchParams.get('per_page') ?? '25', 10))
+    ? parseInt(searchParams.get('per_page') ?? '25', 10)
+    : 25;
+  const search = searchParams.get('search')?.trim() ?? '';
+  const sort = searchParams.get('sort') ?? 'last_name';
+  const order = searchParams.get('order') === 'desc' ? false : true; // true = ascending
+  const solicitorIdParam = searchParams.get('solicitor_id') ?? '';
+
+  const allowedSortColumns: Record<string, string> = {
+    name: 'last_name',
+    last_name: 'last_name',
+    first_name: 'first_name',
+    score: 'score',
+    tier: 'tier',
+    email: 'email',
+  };
+  const sortColumn = allowedSortColumns[sort] ?? 'last_name';
+
+  const supabase = await createClient();
+
+  // 3. Build query
+  let query = supabase
+    .from('donors')
+    .select(
+      `id, first_name, last_name, email, score, tier,
+       assigned_solicitor_id,
+       solicitor:profiles!donors_assigned_solicitor_id_fkey(id, first_name, last_name)`,
+      { count: 'exact' }
+    )
+    .eq('organization_id', organizationId);
+
+  // Solicitors can only see their own donors
+  if (profile.role === 'solicitor') {
+    query = query.eq('assigned_solicitor_id', user.id);
+  } else if (solicitorIdParam) {
+    query = query.eq('assigned_solicitor_id', solicitorIdParam);
+  }
+
+  // Text search
+  if (search) {
+    query = query.or(
+      `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+    );
+  }
+
+  // Sorting
+  query = query.order(sortColumn, { ascending: order });
+  if (sortColumn !== 'last_name') {
+    query = query.order('last_name', { ascending: true });
+  }
+
+  // Pagination
+  const from = (page - 1) * perPage;
+  const to = from + perPage - 1;
+  query = query.range(from, to);
+
+  const { data: donors, error, count } = await query;
+
+  if (error) {
+    console.error('Error fetching donors:', error);
+    return NextResponse.json({ error: 'Failed to fetch donors' }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    donors: donors ?? [],
+    total: count ?? 0,
+    page,
+    per_page: perPage,
+  });
+}
+
 export async function POST(request: NextRequest) {
   // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
