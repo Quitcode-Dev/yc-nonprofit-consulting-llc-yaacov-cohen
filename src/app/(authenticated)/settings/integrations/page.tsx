@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { CsvImportWizard } from '@/components/import/csv-import-wizard';
 
 type ConnectionStatus = 'connected' | 'invalid_key' | 'connection_failed' | 'unknown' | 'loading';
 
@@ -307,16 +308,14 @@ export default function IntegrationsSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center gap-4">
-            <FileUp className="h-8 w-8 text-muted-foreground" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Upload a CSV file</p>
-              <p className="text-sm text-muted-foreground">
-                CSV import is available from the Donors section. Navigate to{' '}
-                <span className="font-medium">Donors → Import</span> to upload a file.
-              </p>
+          {orgId ? (
+            <CsvImportWizard orgId={orgId} />
+          ) : (
+            <div className="flex items-center gap-4">
+              <FileUp className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Loading…</p>
             </div>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>
