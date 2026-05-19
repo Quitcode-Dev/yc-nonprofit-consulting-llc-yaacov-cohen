@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { SolicitorDashboard } from '@/components/dashboard/solicitor-dashboard';
+import { AdminDashboard } from '@/components/dashboard/admin-dashboard';
 
 interface ProfileResponse {
   role: string;
@@ -40,17 +41,7 @@ export default function DashboardPage() {
 
       {role === 'solicitor' && <SolicitorDashboard />}
 
-      {role === 'org_admin' && (
-        <div className="text-muted-foreground text-sm">
-          Org admin dashboard coming soon.
-        </div>
-      )}
-
-      {role === 'super_admin' && (
-        <div className="text-muted-foreground text-sm">
-          Super admin dashboard coming soon.
-        </div>
-      )}
+      {(role === 'org_admin' || role === 'super_admin') && <AdminDashboard />}
 
       {!role && (
         <div className="text-muted-foreground text-sm">
