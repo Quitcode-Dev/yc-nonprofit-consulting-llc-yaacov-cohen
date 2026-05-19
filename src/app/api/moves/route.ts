@@ -6,6 +6,75 @@ import {
   AuthorizationError,
 } from '@/lib/auth/authorize';
 
+export async function GET(request: NextRequest) {
+  // 1. Authenticate & authorise
+  let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
+  let user: Awaited<ReturnType<typeof getAuthenticatedUser>>['user'];
+
+  try {
+    const auth = await getAuthenticatedUser(request);
+    user = auth.user;
+    profile = auth.profile;
+    assertRole(profile, ['solicitor', 'org_admin', 'super_admin']);
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const organizationId = profile.organization_id;
+  if (!organizationId) {
+    return NextResponse.json(
+      { error: 'No organization associated with this account' },
+      { status: 400 }
+    );
+  }
+
+  const { searchParams } = new URL(request.url);
+  const statusFilter = searchParams.get('status') ?? 'all';
+  const sortParam = searchParams.get('sort') ?? 'due_date_asc';
+  const solicitorIdParam = searchParams.get('solicitor_id');
+
+  const supabase = await createClient();
+
+  let query = supabase
+    .from('moves')
+    .select(
+      `id, title, due_date, status, completion_notes, completed_at,
+       donor_id, solicitor_id, move_idea_id, organization_id,
+       donors ( id, first_name, last_name ),
+       profiles:solicitor_id ( id, first_name, last_name )`
+    )
+    .eq('organization_id', organizationId);
+
+  // Solicitors always see only their own moves
+  if (profile.role === 'solicitor') {
+    query = query.eq('solicitor_id', user.id);
+  } else if (solicitorIdParam) {
+    // Admins may optionally filter by solicitor
+    query = query.eq('solicitor_id', solicitorIdParam);
+  }
+
+  if (statusFilter === 'pending') {
+    query = query.eq('status', 'pending');
+  } else if (statusFilter === 'completed') {
+    query = query.eq('status', 'completed');
+  }
+
+  const ascending = sortParam !== 'due_date_desc';
+  query = query.order('due_date', { ascending });
+
+  const { data: moves, error } = await query;
+
+  if (error) {
+    console.error('Error fetching moves:', error);
+    return NextResponse.json({ error: 'Failed to fetch moves' }, { status: 500 });
+  }
+
+  return NextResponse.json({ moves });
+}
+
 export async function POST(request: NextRequest) {
   // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
