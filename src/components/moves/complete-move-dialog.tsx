@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { format, isBefore, isToday, startOfDay } from 'date-fns';
+import { format, isBefore, startOfDay } from 'date-fns';
 import { CalendarIcon, ChevronsUpDown, Check } from 'lucide-react';
 
 import {
@@ -219,6 +219,18 @@ export function CompleteMoveDialog({
                 <span className="font-medium">Move: </span>
                 {move.title}
               </p>
+              {move.donor_name && (
+                <p>
+                  <span className="font-medium">Donor: </span>
+                  {move.donor_name}
+                </p>
+              )}
+              {move.solicitor_name && (
+                <p>
+                  <span className="font-medium">Solicitor: </span>
+                  {move.solicitor_name}
+                </p>
+              )}
             </div>
 
             {/* Yes / No toggle */}
@@ -377,8 +389,7 @@ export function CompleteMoveDialog({
                           setErrors((prev) => ({ ...prev, follow_up_due_date: '' }));
                         }}
                         disabled={(date) =>
-                          isBefore(startOfDay(date), startOfDay(new Date())) &&
-                          !isToday(date)
+                          isBefore(startOfDay(date), startOfDay(new Date()))
                         }
                         initialFocus
                       />
