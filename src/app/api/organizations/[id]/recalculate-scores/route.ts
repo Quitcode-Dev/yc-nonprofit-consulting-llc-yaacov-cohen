@@ -24,10 +24,10 @@ export async function POST(_request: NextRequest, { params }: RouteContext) {
 
   const supabase = await createClient();
 
-  // Load enabled scoring config for this org
+  // Load enabled scoring configs for this org
   const { data: configs, error: configError } = await supabase
     .from('scoring_config')
-    .select('field_name, is_enabled, point_value')
+    .select('field_name, point_value')
     .eq('organization_id', id)
     .eq('is_enabled', true);
 
@@ -47,11 +47,26 @@ export async function POST(_request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Failed to load donors' }, { status: 500 });
   }
 
-  if (!donors || donors.length === 0) {
-    return NextResponse.json({ updated: 0 });
+  // Load tier configs for this org ordered by min_score ascending
+  const { data: tierConfigs, error: tierConfigError } = await supabase
+    .from('tier_config')
+    .select('name, min_score, max_score')
+    .eq('organization_id', id)
+    .order('min_score', { ascending: true });
+
+  if (tierConfigError) {
+    return NextResponse.json({ error: 'Failed to load tier config' }, { status: 500 });
   }
 
-  // Calculate score for each donor
+  const tiers = tierConfigs ?? [];
+
+  if (!donors || donors.length === 0) {
+    return NextResponse.json({ updated_count: 0 });
+  }
+
+  const now = new Date().toISOString();
+
+  // Calculate score and tier for each donor
   const updates = donors.map((donor) => {
     let score = 0;
     for (const config of enabledConfigs) {
@@ -60,10 +75,16 @@ export async function POST(_request: NextRequest, { params }: RouteContext) {
         score += config.point_value;
       }
     }
-    return { id: donor.id, score, updated_at: new Date().toISOString() };
+
+    const matchedTier = tiers.find(
+      (tier) => score >= tier.min_score && score <= tier.max_score
+    );
+    const tier: string | null = matchedTier ? matchedTier.name : null;
+
+    return { id: donor.id, score, tier, updated_at: now };
   });
 
-  // Batch upsert scores
+  // Batch upsert scores and tiers
   const { error: updateError } = await supabase
     .from('donors')
     .upsert(updates, { onConflict: 'id' });
@@ -72,5 +93,5 @@ export async function POST(_request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Failed to update donor scores' }, { status: 500 });
   }
 
-  return NextResponse.json({ updated: updates.length });
+  return NextResponse.json({ updated_count: updates.length });
 }
