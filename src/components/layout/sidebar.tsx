@@ -25,19 +25,20 @@ const navByRole: Record<UserRole, NavItem[]> = {
     { label: "Move Ideas Library", href: "/move-ideas" },
     { label: "Feedback Inbox", href: "/feedback" }
   ],
-  org_admin: [
-    { label: "Dashboard", href: "/dashboard" },
-    { label: "Donors", href: "/donors" },
-    { label: "Moves", href: "/moves" },
-    { label: "Settings", href: "/settings" },
-    { label: "Users", href: "/users" }
-  ],
   solicitor: [
     { label: "Dashboard", href: "/dashboard" },
     { label: "My Donors", href: "/donors" },
     { label: "My Moves", href: "/moves" },
-    { label: "Calendar", href: "/calendar" }
-  ]
+    { label: "Calendar", href: "/moves/calendar" }
+  ],
+  org_admin: [
+    { label: "Dashboard", href: "/dashboard" },
+    { label: "Donors", href: "/donors" },
+    { label: "Moves", href: "/moves" },
+    { label: "Calendar", href: "/moves/calendar" },
+    { label: "Settings", href: "/settings" },
+    { label: "Users", href: "/users" }
+  ],
 }
 
 function NavLinks({
