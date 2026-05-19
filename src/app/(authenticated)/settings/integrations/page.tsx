@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { CsvImportWizard } from '@/components/import/csv-import-wizard';
 
 type ConnectionStatus = 'connected' | 'invalid_key' | 'connection_failed' | 'unknown' | 'loading';
 
