@@ -72,6 +72,9 @@ export interface Move {
   follow_up_move_id: string | null
   parent_move_id: string | null
   created_at: string
+  // Joined display fields (populated by some API responses)
+  donor_name?: string
+  solicitor_name?: string
 }
 
 export interface ScoringConfig {
