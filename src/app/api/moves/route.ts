@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
   const statusFilter = searchParams.get('status') ?? 'all';
   const sortParam = searchParams.get('sort') ?? 'due_date_asc';
   const solicitorIdParam = searchParams.get('solicitor_id');
+  const fromParam = searchParams.get('from');
+  const toParam = searchParams.get('to');
 
   const supabase = await createClient();
 
@@ -60,6 +62,13 @@ export async function GET(request: NextRequest) {
     query = query.eq('status', 'pending');
   } else if (statusFilter === 'completed') {
     query = query.eq('status', 'completed');
+  }
+
+  if (fromParam) {
+    query = query.gte('due_date', fromParam);
+  }
+  if (toParam) {
+    query = query.lte('due_date', toParam);
   }
 
   const ascending = sortParam !== 'due_date_desc';
