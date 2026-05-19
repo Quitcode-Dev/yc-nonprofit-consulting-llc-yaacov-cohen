@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
+import { formatDistanceToNow } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useDashboardRefresh } from '@/lib/hooks/use-dashboard-refresh';
 
 interface LeaderboardEntry {
   id: string;
@@ -50,25 +52,24 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const res = await fetch('/api/dashboard/admin');
-        if (!res.ok) {
-          const body = await res.json();
-          setError(body.error ?? 'Failed to load dashboard data');
-          return;
-        }
-        const json: AdminDashboardData = await res.json();
-        setData(json);
-      } catch {
-        setError('Failed to load dashboard data');
-      } finally {
-        setLoading(false);
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch('/api/dashboard/admin');
+      if (!res.ok) {
+        const body = await res.json();
+        setError(body.error ?? 'Failed to load dashboard data');
+        return;
       }
-    };
-    fetchData();
+      const json: AdminDashboardData = await res.json();
+      setData(json);
+    } catch {
+      setError('Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  const { lastUpdated, isRefreshing } = useDashboardRefresh(fetchData);
 
   if (loading) {
     return (
@@ -96,6 +97,15 @@ export function AdminDashboard() {
         <MetricCard label="Completed" value={data.moves_completed} />
         <MetricCard label="Pending" value={data.pending_moves} />
       </div>
+
+      {/* ── Last updated ── */}
+      <p className="text-xs text-muted-foreground text-right">
+        {isRefreshing
+          ? 'Refreshing…'
+          : lastUpdated
+          ? `Last updated: ${formatDistanceToNow(lastUpdated, { addSuffix: true })}`
+          : null}
+      </p>
 
       {/* ── Leaderboard + Recent Activity ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

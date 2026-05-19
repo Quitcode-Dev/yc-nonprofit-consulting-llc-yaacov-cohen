@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { isToday, isBefore, startOfDay, parseISO } from 'date-fns';
+import { formatDistanceToNow, isToday, isBefore, startOfDay, parseISO } from 'date-fns';
+import { useDashboardRefresh } from '@/lib/hooks/use-dashboard-refresh';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -38,7 +39,7 @@ export function SolicitorDashboard() {
   const [selectedMove, setSelectedMove] = useState<Move | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const res = await fetch('/api/dashboard/solicitor');
       if (!res.ok) {
@@ -53,21 +54,19 @@ export function SolicitorDashboard() {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
   }, []);
 
-  const handleMoveClick = (move: Move) => {
-    setSelectedMove(move);
-    setDialogOpen(true);
-  };
+  const { lastUpdated, isRefreshing, refresh } = useDashboardRefresh(fetchData);
 
   const handleMoveComplete = () => {
     setDialogOpen(false);
     setSelectedMove(null);
-    fetchData();
+    refresh();
+  };
+
+  const handleMoveClick = (move: Move) => {
+    setSelectedMove(move);
+    setDialogOpen(true);
   };
 
   if (loading) {
@@ -286,6 +285,15 @@ export function SolicitorDashboard() {
           onComplete={handleMoveComplete}
         />
       )}
+
+      {/* ── Last updated ─────────────────────────────────────────────────── */}
+      <p className="mt-4 text-xs text-muted-foreground text-right">
+        {isRefreshing
+          ? 'Refreshing…'
+          : lastUpdated
+          ? `Last updated: ${formatDistanceToNow(lastUpdated, { addSuffix: true })}`
+          : null}
+      </p>
     </>
   );
 }
