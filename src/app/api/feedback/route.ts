@@ -1,6 +1,90 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getAuthenticatedUser } from "@/lib/auth"
+import { assertRole, AuthorizationError } from "@/lib/auth/authorize"
+
+export async function GET(request: NextRequest) {
+  // 1. Authenticate & authorise
+  let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>["profile"]
+
+  try {
+    const auth = await getAuthenticatedUser()
+    profile = auth.profile
+    assertRole(profile, ["super_admin"])
+  } catch (err) {
+    if (err instanceof AuthorizationError) {
+      return NextResponse.json({ error: err.message }, { status: err.status })
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const { searchParams } = new URL(request.url)
+  const category = searchParams.get("category") || null
+  const orgId = searchParams.get("org_id") || null
+  const status = searchParams.get("status") || null
+  const from = searchParams.get("from") || null
+  const to = searchParams.get("to") || null
+  const sort = searchParams.get("sort") || "desc"
+  const page = parseInt(searchParams.get("page") || "1", 10)
+  const pageSize = 50
+  const offset = (page - 1) * pageSize
+
+  const supabase = await createClient()
+
+  let query = supabase
+    .from("feedback")
+    .select(
+      `
+      id,
+      category,
+      title,
+      description,
+      status,
+      attachment_url,
+      created_at,
+      updated_at,
+      user_id,
+      organization_id,
+      user_profiles!feedback_user_id_fkey (
+        first_name,
+        last_name,
+        email
+      ),
+      organizations!feedback_organization_id_fkey (
+        name
+      )
+    `,
+      { count: "exact" }
+    )
+
+  if (category) query = query.eq("category", category)
+  if (orgId) query = query.eq("organization_id", orgId)
+  if (status) query = query.eq("status", status)
+  if (from) query = query.gte("created_at", from)
+  if (to) {
+    // include the full "to" day
+    const toDate = new Date(to)
+    toDate.setDate(toDate.getDate() + 1)
+    query = query.lt("created_at", toDate.toISOString().slice(0, 10))
+  }
+
+  query = query
+    .order("created_at", { ascending: sort === "asc" })
+    .range(offset, offset + pageSize - 1)
+
+  const { data, error, count } = await query
+
+  if (error) {
+    return NextResponse.json({ error: "Failed to fetch feedback" }, { status: 500 })
+  }
+
+  return NextResponse.json({
+    feedback: data ?? [],
+    total: count ?? 0,
+    page,
+    pageSize,
+  })
+}
 
 export async function POST(request: NextRequest) {
   // 1. Authenticate
