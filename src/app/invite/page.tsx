@@ -26,7 +26,7 @@ function validatePassword(password: string): string | null {
   return null;
 }
 
-export default function InviteRegistrationPage() {
+function InviteRegistrationPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get('token');
@@ -309,5 +309,15 @@ export default function InviteRegistrationPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+import { Suspense } from 'react';
+
+export default function InviteRegistrationPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>}>
+      <InviteRegistrationPageInner />
+    </Suspense>
   );
 }
