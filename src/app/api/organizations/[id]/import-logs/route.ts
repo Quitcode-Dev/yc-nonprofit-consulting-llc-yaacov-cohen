@@ -12,7 +12,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
   try {
-    const auth = await getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser();
     profile = auth.profile;
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
