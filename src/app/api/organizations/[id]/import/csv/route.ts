@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // ── 1. Auth ──────────────────────────────────────────────────────────────
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
   try {
-    const auth = await getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser();
     profile = auth.profile;
   } catch {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
