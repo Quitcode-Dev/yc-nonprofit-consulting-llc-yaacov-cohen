@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
 
   try {
-    const auth = await getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser();
     user = auth.user;
     profile = auth.profile;
   } catch (err: unknown) {
