@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import FullCalendar from "@fullcalendar/react"
 import dayGridPlugin from "@fullcalendar/daygrid"
-import interactionPlugin, { EventClickArg } from "@fullcalendar/interaction"
-import { DatesSetArg, EventInput } from "@fullcalendar/core"
+import interactionPlugin from "@fullcalendar/interaction"
+import { DatesSetArg, EventInput, EventClickArg } from "@fullcalendar/core"
 import { Card, CardContent } from "@/components/ui/card"
 import {
   Select,
@@ -55,13 +55,6 @@ export default function MovesCalendarPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Determine role on mount by fetching a small moves request and inspecting
-  // the solicitor filter availability. We use /api/moves with no params and
-  // check whether the response contains moves from multiple solicitors.
-  // A simpler approach: fetch /api/moves and derive isAdmin from profile via
-  // a dedicated profile endpoint. Here we rely on the presence of the
-  // solicitor filter: if the API returns moves for all solicitors the user is admin.
-  // We detect role by attempting to fetch /api/organizations (only admins succeed).
   useEffect(() => {
     async function detectRole() {
       try {
@@ -91,7 +84,6 @@ export default function MovesCalendarPage() {
         const json = await res.json()
         const moves: Move[] = json.moves ?? []
 
-        // Build solicitor list for admin filter (deduplicate)
         if (isAdmin) {
           const map = new Map<string, string>()
           for (const m of moves) {
@@ -118,9 +110,9 @@ export default function MovesCalendarPage() {
           const isOverdue = m.status === "pending" && dueDate < today
           const isCompleted = m.status === "completed"
 
-          let backgroundColor = "#eab308" // pending — yellow
-          if (isOverdue) backgroundColor = "#ef4444" // overdue — red
-          if (isCompleted) backgroundColor = "#22c55e" // completed — green
+          let backgroundColor = "#eab308"
+          if (isOverdue) backgroundColor = "#ef4444"
+          if (isCompleted) backgroundColor = "#22c55e"
 
           return {
             id: m.id,
@@ -143,7 +135,6 @@ export default function MovesCalendarPage() {
     [isAdmin]
   )
 
-  // Re-fetch when date range or solicitor filter changes
   useEffect(() => {
     if (dateRange) {
       fetchMoves(dateRange.from, dateRange.to, selectedSolicitor)
