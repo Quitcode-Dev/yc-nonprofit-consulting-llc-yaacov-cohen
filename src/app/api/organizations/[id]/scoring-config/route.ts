@@ -72,7 +72,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       typeof (item as Record<string, unknown>).is_enabled !== 'boolean' ||
       typeof (item as Record<string, unknown>).point_value !== 'number' ||
       !Number.isInteger((item as Record<string, unknown>).point_value) ||
-      (item as Record<string, unknown>).point_value < 1
+      ((item as Record<string, unknown>).point_value as number) < 1
     ) {
       return NextResponse.json(
         { error: 'Each item must have field_name (string), is_enabled (boolean), point_value (positive integer)' },
