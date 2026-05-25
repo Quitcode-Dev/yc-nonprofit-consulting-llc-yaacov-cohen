@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getAuthenticatedUser>>['user'];
 
   try {
-    const auth = await getAuthenticatedUser(request);
+    const auth = await getAuthenticatedUser();
     user = auth.user;
     profile = auth.profile;
     assertRole(profile, ['org_admin', 'super_admin', 'solicitor']);
