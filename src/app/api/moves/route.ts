@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import {
   getAuthenticatedUser,
   assertRole,
@@ -7,13 +8,10 @@ import {
 } from '@/lib/auth/authorize';
 
 export async function GET(request: NextRequest) {
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
-  let user: Awaited<ReturnType<typeof getAuthenticatedUser>>['user'];
 
   try {
     const auth = await getAuthenticatedUser();
-    user = auth.user;
     profile = auth.profile;
     assertRole(profile, ['solicitor', 'org_admin', 'super_admin']);
   } catch (err) {
@@ -24,7 +22,9 @@ export async function GET(request: NextRequest) {
   }
 
   const organizationId = profile.organization_id;
-  if (!organizationId) {
+
+  // super_admin without org context is allowed — they see all data
+  if (!organizationId && profile.role !== 'super_admin') {
     return NextResponse.json(
       { error: 'No organization associated with this account' },
       { status: 400 }
@@ -38,30 +38,38 @@ export async function GET(request: NextRequest) {
   const fromParam = searchParams.get('from');
   const toParam = searchParams.get('to');
 
-  const supabase = await createClient();
+  // Use the admin client for super_admin so RLS doesn't hide other orgs' rows.
+  const supabase =
+    profile.role === 'super_admin'
+      ? createAdminClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        )
+      : await createClient();
 
   let query = supabase
     .from('moves')
     .select(
-      `id, title, due_date, status, completion_notes, completed_at,
-       donor_id, solicitor_id, move_idea_id, organization_id,
-       donors ( id, first_name, last_name ),
-       profiles:solicitor_id ( id, first_name, last_name )`
-    )
-    .eq('organization_id', organizationId);
+      `id, name, due_date, is_completed, completion_notes, completed_at,
+       donor_id, assigned_to, move_idea_id, organization_id,
+       donors ( id, first_name, last_name )`
+    );
 
-  // Solicitors always see only their own moves
+  if (organizationId) {
+    query = query.eq('organization_id', organizationId);
+  }
+
   if (profile.role === 'solicitor') {
-    query = query.eq('solicitor_id', user.id);
+    query = query.eq('assigned_to', profile.id);
   } else if (solicitorIdParam) {
-    // Admins may optionally filter by solicitor
-    query = query.eq('solicitor_id', solicitorIdParam);
+    query = query.eq('assigned_to', solicitorIdParam);
   }
 
   if (statusFilter === 'pending') {
-    query = query.eq('status', 'pending');
+    query = query.eq('is_completed', false);
   } else if (statusFilter === 'completed') {
-    query = query.eq('status', 'completed');
+    query = query.eq('is_completed', true);
   }
 
   if (fromParam) {
@@ -81,17 +89,50 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch moves' }, { status: 500 });
   }
 
-  return NextResponse.json({ moves });
+  // Fetch solicitor (user_roles) names separately so we don't depend on FK joins.
+  const solicitorIds = [
+    ...new Set((moves ?? []).map((m) => m.assigned_to).filter(Boolean)),
+  ];
+  let solicitorMap: Record<string, { id: string; full_name: string | null }> = {};
+
+  if (solicitorIds.length > 0) {
+    const adminClient = createAdminClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+    const { data: solicitors } = await adminClient
+      .from('user_roles')
+      .select('id, full_name')
+      .in('id', solicitorIds as string[]);
+    solicitorMap = Object.fromEntries(
+      (solicitors ?? []).map((s) => [s.id, s])
+    );
+  }
+
+  const moveRows = (moves ?? []).map((m) => {
+    const sol = m.assigned_to ? solicitorMap[m.assigned_to] : null;
+    const parts = (sol?.full_name ?? '').split(' ');
+    return {
+      ...m,
+      // Backwards-compat aliases for the UI
+      title: m.name,
+      status: m.is_completed ? 'completed' : 'pending',
+      solicitor_id: m.assigned_to,
+      profiles: sol
+        ? { id: sol.id, first_name: parts[0] ?? '', last_name: parts.slice(1).join(' ') }
+        : null,
+    };
+  });
+
+  return NextResponse.json({ moves: moveRows });
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
-  let user: Awaited<ReturnType<typeof getAuthenticatedUser>>['user'];
 
   try {
     const auth = await getAuthenticatedUser();
-    user = auth.user;
     profile = auth.profile;
     assertRole(profile, ['solicitor', 'org_admin', 'super_admin']);
   } catch (err) {
@@ -109,7 +150,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 2. Parse body
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -117,25 +157,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { donor_id, move_idea_id, due_date, title } = body as {
+  const { donor_id, move_idea_id, due_date } = body as {
     donor_id?: string;
     move_idea_id?: string;
     due_date?: string;
-    title?: string;
   };
+  // Accept both 'name' and legacy 'title'
+  const name = (body.name ?? body.title) as string | undefined;
 
-  // 3. Validate required fields
   if (!donor_id || typeof donor_id !== 'string') {
     return NextResponse.json({ error: 'donor_id is required' }, { status: 422 });
   }
   if (!due_date || typeof due_date !== 'string') {
     return NextResponse.json({ error: 'due_date is required' }, { status: 422 });
   }
-  if (!title || typeof title !== 'string' || title.trim() === '') {
-    return NextResponse.json({ error: 'title is required' }, { status: 422 });
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    return NextResponse.json({ error: 'name is required' }, { status: 422 });
   }
 
-  // Validate due_date is today or future
   const dueDateObj = new Date(due_date);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -148,10 +187,9 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createClient();
 
-  // 4. Validate donor belongs to org (and to solicitor if role === 'solicitor')
   const { data: donor, error: donorError } = await supabase
     .from('donors')
-    .select('id, organization_id, assigned_solicitor_id')
+    .select('id, organization_id, primary_solicitor_id')
     .eq('id', donor_id)
     .eq('organization_id', organizationId)
     .single();
@@ -160,28 +198,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Donor not found' }, { status: 404 });
   }
 
-  if (profile.role === 'solicitor' && donor.assigned_solicitor_id !== user.id) {
+  if (profile.role === 'solicitor' && donor.primary_solicitor_id !== profile.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // 5. Insert move
+  // Allow caller to specify assigned_to; default to the current user's profile id
+  const assignedTo = (body.assigned_to as string | null) || profile.id;
+
   const moveInsert = {
     organization_id: organizationId,
     donor_id,
-    solicitor_id: user.id,
+    assigned_to: assignedTo,
     move_idea_id: move_idea_id || null,
     due_date,
-    title: title.trim(),
-    status: 'pending' as const,
-    completion_notes: null,
-    completed_at: null,
-    follow_up_move_id: null,
-    parent_move_id: null,
+    name: name.trim(),
+    is_completed: false,
   };
 
   const { data: move, error: insertError } = await supabase
     .from('moves')
-    .insert(moveInsert)
+    .insert(moveInsert as never)
     .select()
     .single();
 

@@ -41,7 +41,7 @@ export function TopBar({
     try {
       const supabase = createClient()
       await supabase
-        .from("user_profiles")
+        .from("user_roles")
         .update({ organization_id: null })
         .eq("id", userProfile.id)
 

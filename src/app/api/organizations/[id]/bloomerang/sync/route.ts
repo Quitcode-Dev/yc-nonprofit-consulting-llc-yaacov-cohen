@@ -218,9 +218,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           .update({
             first_name: firstName || null,
             last_name: lastName || null,
+            name: [firstName, lastName].filter(Boolean).join(' ') || null,
             email,
             phone,
-          })
+          } as never)
           .eq('id', existing.id);
 
         if (updateError) {
@@ -239,9 +240,11 @@ export async function POST(_request: NextRequest, context: RouteContext) {
             bloomerang_id: c.Id,
             first_name: firstName || null,
             last_name: lastName || null,
+            name: [firstName, lastName].filter(Boolean).join(' ') || null,
             email,
             phone,
-          })
+            total_score: 0,
+          } as never)
           .select('id')
           .single();
 
@@ -266,17 +269,15 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       }
 
       const { error: txError } = await supabase
-        .from('donation_history')
-        .upsert(
+        .from('donations')
+        .insert(
           {
             donor_id: donorId,
             organization_id: orgId,
-            bloomerang_transaction_id: t.Id,
             amount: t.Amount,
             donated_at: t.Date,
-            type: t.Type ?? null,
-          },
-          { onConflict: 'bloomerang_transaction_id' }
+            donation_type: t.Type ?? null,
+          } as never
         );
 
       if (txError) {

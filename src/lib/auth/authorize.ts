@@ -31,17 +31,24 @@ export async function getAuthenticatedUser(): Promise<{ user: User; profile: Use
     throw new AuthorizationError(401, 'Unauthorized');
   }
 
-  const { data: profile, error: profileError } = await supabase
-    .from('user_profile')
+  const { data: userRole, error: profileError } = await supabase
+    .from('user_roles')
     .select('id, role, organization_id')
-    .eq('id', user.id)
-    .single();
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle();
 
-  if (profileError || !profile) {
+  if (profileError || !userRole) {
     throw new AuthorizationError(403, 'User profile not found');
   }
 
-  return { user, profile: profile as UserProfile };
+  const profile: UserProfile = {
+    id: userRole.id,
+    role: (userRole.role === 'organization_admin' ? 'org_admin' : userRole.role) as UserRole,
+    organization_id: userRole.organization_id ?? null,
+  };
+
+  return { user, profile };
 }
 
 export function assertRole(profile: UserProfile, allowedRoles: UserRole[]): void {

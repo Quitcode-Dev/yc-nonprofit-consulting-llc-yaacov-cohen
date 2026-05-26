@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Card,
   CardContent,
@@ -29,24 +30,12 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
-type UserRole = "super_admin" | "org_admin" | "solicitor";
-
-type UserProfile = {
-  id: string;
-  role: UserRole;
-  is_active: boolean;
-  organization_id: string | null;
-};
-
-type Organization = {
-  id: string;
-  is_active: boolean;
-};
 
 function getSafeRedirectPath(value: string | null): string | null {
   if (!value) return null;
   if (!value.startsWith("/")) return null;
   if (value.startsWith("//")) return null;
+  if (value === "/") return null;
   return value;
 }
 
@@ -56,6 +45,36 @@ function LoginForm() {
   const supabase = createClient();
 
   const [submitError, setSubmitError] = useState<string>("");
+  const [testLoginLoading, setTestLoginLoading] = useState<string | null>(null);
+
+  const handleTestLogin = async (role: "super_admin" | "org_admin") => {
+    setTestLoginLoading(role);
+    try {
+      const res = await fetch(`/api/auth/test-login?role=${role}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error ?? "Test login failed");
+        return;
+      }
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
+
+      if (signInError) {
+        toast.error("Failed to sign in test user");
+        return;
+      }
+
+      window.location.href = "/dashboard";
+    } catch {
+      toast.error("Test login failed");
+    } finally {
+      setTestLoginLoading(null);
+    }
+  };
 
   useEffect(() => {
     if (searchParams.get("expired") === "true") {
@@ -91,52 +110,20 @@ function LoginForm() {
 
     const userId = authData.user.id;
 
-    const { data: profile, error: profileError } = await supabase
-      .from("user_profiles")
+    const { data: userRole, error: profileError } = await supabase
+      .from("user_roles")
       .select("id, role, is_active, organization_id")
-      .eq("id", userId)
-      .single<UserProfile>();
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .maybeSingle();
 
-    if (profileError || !profile) {
+    if (profileError || !userRole) {
       setSubmitError("Invalid email or password");
       return;
     }
 
-    if (!profile.is_active) {
-      setSubmitError("Account deactivated");
-      return;
-    }
-
-    if (
-      (profile.role === "org_admin" || profile.role === "solicitor") &&
-      profile.organization_id
-    ) {
-      const { data: organization, error: orgError } = await supabase
-        .from("organizations")
-        .select("id, is_active")
-        .eq("id", profile.organization_id)
-        .single<Organization>();
-
-      if (orgError || !organization) {
-        setSubmitError("Organization deactivated");
-        return;
-      }
-
-      if (!organization.is_active) {
-        setSubmitError("Organization deactivated");
-        return;
-      }
-    }
-
     const redirectTo = getSafeRedirectPath(searchParams.get("redirectTo"));
-    const roleDashboardPath =
-      profile.role === "super_admin" ||
-      profile.role === "org_admin" ||
-      profile.role === "solicitor"
-        ? "/dashboard"
-        : "/dashboard";
-
-    router.push(redirectTo ?? roleDashboardPath);
+    router.push(redirectTo ?? "/dashboard");
   };
 
   return (
@@ -197,6 +184,44 @@ function LoginForm() {
           </Link>
         </CardFooter>
       </Card>
+
+      <div className="mt-6">
+        <div className="flex items-center gap-3 mb-4">
+          <Separator className="flex-1" />
+          <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+            Test Login
+          </span>
+          <Separator className="flex-1" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={testLoginLoading !== null}
+            onClick={() => handleTestLogin("super_admin")}
+            className="flex flex-col h-auto py-3 gap-1"
+          >
+            <span className="text-xs font-semibold">Super Admin</span>
+            <span className="text-[10px] text-muted-foreground font-normal">All organizations</span>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={testLoginLoading !== null}
+            onClick={() => handleTestLogin("org_admin")}
+            className="flex flex-col h-auto py-3 gap-1"
+          >
+            <span className="text-xs font-semibold">Org Admin</span>
+            <span className="text-[10px] text-muted-foreground font-normal">Demo Nonprofit</span>
+          </Button>
+        </div>
+        {testLoginLoading && (
+          <p className="text-center text-xs text-muted-foreground mt-3">
+            {testLoginLoading === "super_admin" ? "Signing in as Super Admin…" : "Signing in as Org Admin…"}
+            {" "}This may take a moment on first use.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

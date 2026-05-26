@@ -13,13 +13,10 @@ interface RouteContext {
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id: moveId } = await context.params;
 
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
-  let user: Awaited<ReturnType<typeof getAuthenticatedUser>>['user'];
 
   try {
     const auth = await getAuthenticatedUser();
-    user = auth.user;
     profile = auth.profile;
     assertRole(profile, ['solicitor', 'org_admin', 'super_admin']);
   } catch (err) {
@@ -37,7 +34,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     );
   }
 
-  // 2. Parse body
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -49,21 +45,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     completion_notes?: string;
     follow_up?: {
       move_idea_id?: string;
+      name?: string;
       title?: string;
       due_date?: string;
     };
   };
 
-  if (!completion_notes || typeof completion_notes !== 'string' || completion_notes.trim() === '') {
-    return NextResponse.json({ error: 'completion_notes is required' }, { status: 422 });
-  }
+  const notesTrimmed = typeof completion_notes === 'string' ? completion_notes.trim() : '';
 
   const supabase = await createClient();
 
-  // 3. Fetch the move and verify ownership / org
   const { data: move, error: fetchError } = await supabase
     .from('moves')
-    .select('id, organization_id, solicitor_id, donor_id, status')
+    .select('id, organization_id, assigned_to, donor_id, is_completed')
     .eq('id', moveId)
     .eq('organization_id', organizationId)
     .single();
@@ -72,19 +66,19 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Move not found' }, { status: 404 });
   }
 
-  if (move.status === 'completed') {
+  if (move.is_completed) {
     return NextResponse.json({ error: 'Move is already completed' }, { status: 409 });
   }
 
-  if (profile.role === 'solicitor' && move.solicitor_id !== user.id) {
+  if (profile.role === 'solicitor' && move.assigned_to !== profile.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  // 4. Validate follow-up payload if provided
   let followUpDueDate: Date | null = null;
   if (follow_up) {
-    if (!follow_up.title || typeof follow_up.title !== 'string' || follow_up.title.trim() === '') {
-      return NextResponse.json({ error: 'follow_up.title is required' }, { status: 422 });
+    const followUpName = follow_up.name ?? follow_up.title;
+    if (!followUpName || typeof followUpName !== 'string' || followUpName.trim() === '') {
+      return NextResponse.json({ error: 'follow_up.name is required' }, { status: 422 });
     }
     if (!follow_up.due_date || typeof follow_up.due_date !== 'string') {
       return NextResponse.json({ error: 'follow_up.due_date is required' }, { status: 422 });
@@ -100,14 +94,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
   }
 
-  // 5. Mark move as completed (follow_up_move_id updated after follow-up insert)
   const { data: completedMove, error: updateError } = await supabase
     .from('moves')
     .update({
-      status: 'completed',
+      is_completed: true,
       completed_at: new Date().toISOString(),
-      completion_notes: completion_notes.trim(),
-    })
+      completion_notes: notesTrimmed || null,
+    } as never)
     .eq('id', moveId)
     .select()
     .single();
@@ -117,30 +110,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Failed to complete move' }, { status: 500 });
   }
 
-  // 6. Optionally create follow-up move
   let followUpMove = null;
-  if (follow_up && follow_up.title && follow_up.due_date) {
+  if (follow_up) {
+    const followUpName = (follow_up.name ?? follow_up.title ?? '').trim();
     const { data: newMove, error: followUpError } = await supabase
       .from('moves')
       .insert({
         organization_id: organizationId,
         donor_id: move.donor_id,
-        solicitor_id: move.solicitor_id,
+        assigned_to: move.assigned_to,
         move_idea_id: follow_up.move_idea_id || null,
         due_date: follow_up.due_date,
-        title: follow_up.title.trim(),
-        status: 'pending',
-        completion_notes: null,
-        completed_at: null,
-        parent_move_id: moveId,
-        follow_up_move_id: null,
-      })
+        name: followUpName,
+        is_completed: false,
+      } as never)
       .select()
       .single();
 
     if (followUpError || !newMove) {
       console.error('Error creating follow-up move:', followUpError);
-      // Completed move is already saved; return partial success with warning
       return NextResponse.json(
         { move: completedMove, warning: 'Move completed but follow-up could not be created' },
         { status: 207 }
@@ -148,12 +136,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     followUpMove = newMove;
-
-    // Link follow_up_move_id on the completed move
-    await supabase
-      .from('moves')
-      .update({ follow_up_move_id: newMove.id })
-      .eq('id', moveId);
   }
 
   return NextResponse.json({ move: completedMove, follow_up_move: followUpMove }, { status: 200 });

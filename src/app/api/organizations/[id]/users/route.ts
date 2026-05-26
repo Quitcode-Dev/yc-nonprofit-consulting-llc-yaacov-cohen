@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { getAuthenticatedUser, assertRole, assertOrgAccess } from '@/lib/auth/authorize';
 
 interface RouteContext {
@@ -9,7 +9,6 @@ interface RouteContext {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   const { id } = await params;
 
-  // Authenticate & authorise
   try {
     const auth = await getAuthenticatedUser();
     assertRole(auth.profile, ['super_admin', 'org_admin']);
@@ -20,32 +19,46 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: message }, { status });
   }
 
-  const supabase = await createClient();
+  const adminClient = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
 
-  // Fetch solicitor profiles for this org
-  const { data: solicitors, error: solicitorsError } = await supabase
-    .from('user_profile')
-    .select('id, first_name, last_name, email, is_active, created_at')
+  const { data: solicitors, error: solicitorsError } = await adminClient
+    .from('user_roles')
+    .select('id, email, full_name, is_active, created_at')
     .eq('organization_id', id)
     .eq('role', 'solicitor');
 
   if (solicitorsError) {
-    return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
+    console.error('[users] solicitors fetch error:', solicitorsError.message);
+    return NextResponse.json({ error: solicitorsError.message }, { status: 500 });
   }
 
-  // Fetch pending (unused) invitations for this org
-  const { data: invitations, error: invitationsError } = await supabase
+  const { data: invitations, error: invitationsError } = await adminClient
     .from('invitations')
     .select('id, email, first_name, last_name, created_at')
     .eq('organization_id', id)
     .eq('is_used', false);
 
   if (invitationsError) {
-    return NextResponse.json({ error: 'Failed to fetch invitations' }, { status: 500 });
+    console.error('[users] invitations fetch error:', invitationsError.message);
+    return NextResponse.json({ error: invitationsError.message }, { status: 500 });
   }
 
+  // Split full_name into first_name / last_name for the client
+  const solicitorRows = (solicitors ?? []).map((s) => {
+    const parts = (s.full_name ?? '').split(' ');
+    return {
+      ...s,
+      first_name: parts[0] ?? null,
+      last_name: parts.slice(1).join(' ') || null,
+    };
+  });
+
   return NextResponse.json({
-    solicitors: solicitors ?? [],
+    solicitors: solicitorRows,
     invitations: invitations ?? [],
   });
 }

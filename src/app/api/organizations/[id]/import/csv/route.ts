@@ -143,9 +143,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
       organization_id: orgId,
       first_name: mapped.first_name,
       last_name: mapped.last_name,
+      name: `${mapped.first_name} ${mapped.last_name}`,
       email: mapped.email ?? null,
       phone: mapped.phone ?? null,
       capacity: capacity,
+      total_score: 0,
     });
   }
 

@@ -10,13 +10,28 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
 
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  const { data: userRole } = await supabase
+    .from('user_roles')
+    .select('id, user_id, role, email, full_name, organization_id, is_active, created_at, updated_at')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .maybeSingle()
 
-  if (!profile) redirect('/login')
+  if (!userRole) redirect('/login')
+
+  // Map DB role names to app role names
+  const nameParts = (userRole.full_name ?? '').split(' ')
+  const profile: UserProfile = {
+    id: userRole.id,
+    email: userRole.email ?? user.email ?? '',
+    first_name: nameParts[0] ?? '',
+    last_name: nameParts.slice(1).join(' '),
+    role: (userRole.role === 'organization_admin' ? 'org_admin' : userRole.role) as UserProfile['role'],
+    organization_id: userRole.organization_id ?? null,
+    is_active: userRole.is_active ?? true,
+    created_at: userRole.created_at,
+    updated_at: userRole.updated_at,
+  }
 
   let impersonatedOrgName: string | null = null
   if (profile.role === 'super_admin' && profile.organization_id) {

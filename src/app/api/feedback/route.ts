@@ -4,7 +4,6 @@ import { getAuthenticatedUser } from "@/lib/auth"
 import { assertRole, AuthorizationError } from "@/lib/auth/authorize"
 
 export async function GET(request: NextRequest) {
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>["profile"]
 
   try {
@@ -45,11 +44,6 @@ export async function GET(request: NextRequest) {
       updated_at,
       user_id,
       organization_id,
-      user_profiles!feedback_user_id_fkey (
-        first_name,
-        last_name,
-        email
-      ),
       organizations!feedback_organization_id_fkey (
         name
       )
@@ -62,7 +56,6 @@ export async function GET(request: NextRequest) {
   if (status) query = query.eq("status", status)
   if (from) query = query.gte("created_at", from)
   if (to) {
-    // include the full "to" day
     const toDate = new Date(to)
     toDate.setDate(toDate.getDate() + 1)
     query = query.lt("created_at", toDate.toISOString().slice(0, 10))
@@ -87,7 +80,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Authenticate
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>["profile"]
 
   try {
@@ -97,7 +89,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // 2. Parse multipart form data
   let formData: FormData
   try {
     formData = await request.formData()
@@ -119,7 +110,6 @@ export async function POST(request: NextRequest) {
 
   const supabase = await createClient()
 
-  // 3. Optionally upload attachment
   let attachmentUrl: string | null = null
 
   if (attachment && attachment.size > 0) {
@@ -147,7 +137,6 @@ export async function POST(request: NextRequest) {
     attachmentUrl = urlData.publicUrl
   }
 
-  // 4. Insert feedback record
   const { error: insertError } = await supabase.from("feedback").insert({
     user_id: profile.id,
     organization_id: profile.organization_id ?? null,
@@ -156,7 +145,7 @@ export async function POST(request: NextRequest) {
     description,
     status: "new",
     attachment_url: attachmentUrl,
-  })
+  } as never)
 
   if (insertError) {
     return NextResponse.json(

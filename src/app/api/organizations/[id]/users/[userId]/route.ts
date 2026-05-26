@@ -9,7 +9,6 @@ interface RouteContext {
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   const { id, userId } = await params;
 
-  // Authenticate & authorise
   try {
     const auth = await getAuthenticatedUser();
     assertRole(auth.profile, ['super_admin', 'org_admin']);
@@ -34,9 +33,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 
   const supabase = await createClient();
 
-  // Ensure the target user belongs to this org and is a solicitor
   const { data: existing, error: fetchError } = await supabase
-    .from('user_profile')
+    .from('user_roles')
     .select('id, organization_id, role')
     .eq('id', userId)
     .eq('organization_id', id)
@@ -48,11 +46,11 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
   }
 
   const { data: updated, error: updateError } = await supabase
-    .from('user_profile')
+    .from('user_roles')
     .update({
       is_active: body.is_active,
       updated_at: new Date().toISOString(),
-    })
+    } as never)
     .eq('id', userId)
     .select()
     .single();

@@ -78,21 +78,20 @@ export async function POST(request: NextRequest) {
 
   const newUserId = authData.user.id;
 
-  // Create user_profiles row
-  const { error: profileError } = await supabase.from('user_profiles').insert({
-    id: newUserId,
+  // Create user_roles row
+  const { error: profileError } = await supabase.from('user_roles').insert({
+    user_id: newUserId,
     email: invitation.email,
-    first_name: first_name.trim(),
-    last_name: last_name.trim(),
+    full_name: `${first_name.trim()} ${last_name.trim()}`,
     role: 'solicitor',
     organization_id: invitation.organization_id,
     is_active: true,
-  });
+  } as never);
 
   if (profileError) {
     // Rollback: delete the auth user
     await adminClient.auth.admin.deleteUser(newUserId);
-    return NextResponse.json({ error: 'Failed to create user profile' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create user role' }, { status: 500 });
   }
 
   // Mark invitation as used

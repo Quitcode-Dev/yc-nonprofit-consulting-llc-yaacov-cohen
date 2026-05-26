@@ -40,7 +40,7 @@ export function CompleteMoveDialog({
     setError(null);
     try {
       const res = await fetch(`/api/moves/${move.id}/complete`, {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ completion_notes: notes }),
       });

@@ -9,7 +9,6 @@ interface RouteContext {
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
 
   try {
@@ -23,7 +22,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 2. Parse body
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -31,21 +29,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { title, category } = body;
-
-  if (!title || typeof title !== 'string' || title.trim() === '') {
-    return NextResponse.json({ error: 'title is required' }, { status: 422 });
+  // Accept 'name' or legacy 'title'
+  const name = ((body.name ?? body.title) as string | undefined)?.trim();
+  if (!name || name.length === 0) {
+    return NextResponse.json({ error: 'name is required' }, { status: 422 });
   }
-  if (title.trim().length > 150) {
-    return NextResponse.json({ error: 'title must be 150 characters or fewer' }, { status: 422 });
-  }
-  if (!category || typeof category !== 'string' || category.trim() === '') {
-    return NextResponse.json({ error: 'category is required' }, { status: 422 });
+  if (name.length > 150) {
+    return NextResponse.json({ error: 'name must be 150 characters or fewer' }, { status: 422 });
   }
 
   const supabase = await createClient();
 
-  // 3. Fetch the existing idea to verify ownership
   const { data: existing, error: fetchError } = await supabase
     .from('move_ideas')
     .select('id, is_global, organization_id')
@@ -56,17 +50,27 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Move idea not found' }, { status: 404 });
   }
 
-  // Org admins can only edit their own org's ideas
   if (profile.role === 'org_admin') {
     if (existing.is_global || existing.organization_id !== profile.organization_id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   }
 
-  // 4. Update
+  const purposeRaw = body.purpose ?? body.category;
+  const updatePayload: Record<string, unknown> = { name };
+  if (purposeRaw !== undefined) {
+    updatePayload.purpose = Array.isArray(purposeRaw) ? purposeRaw : [String(purposeRaw)];
+  }
+  if (body.methods !== undefined) {
+    updatePayload.methods = Array.isArray(body.methods) ? body.methods : [];
+  }
+  if (body.types !== undefined) {
+    updatePayload.types = Array.isArray(body.types) ? body.types : [];
+  }
+
   const { data: moveIdea, error } = await supabase
     .from('move_ideas')
-    .update({ title: title.trim(), category: category.trim() })
+    .update(updatePayload as never)
     .eq('id', id)
     .select()
     .single();
@@ -82,7 +86,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 export async function DELETE(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
 
   try {
@@ -98,7 +101,6 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
   const supabase = await createClient();
 
-  // 2. Fetch the existing idea to verify ownership
   const { data: existing, error: fetchError } = await supabase
     .from('move_ideas')
     .select('id, is_global, organization_id')
@@ -109,14 +111,12 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Move idea not found' }, { status: 404 });
   }
 
-  // Org admins can only delete their own org's ideas
   if (profile.role === 'org_admin') {
     if (existing.is_global || existing.organization_id !== profile.organization_id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   }
 
-  // 3. Hard delete — moves retain title as a snapshot on the move row itself
   const { error } = await supabase.from('move_ideas').delete().eq('id', id);
 
   if (error) {

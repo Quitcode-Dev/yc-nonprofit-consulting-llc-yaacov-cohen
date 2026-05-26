@@ -3,7 +3,6 @@ import { createClient } from '@/lib/supabase/server';
 import { getAuthenticatedUser, assertRole, AuthorizationError } from '@/lib/auth/authorize';
 
 export async function GET(request: NextRequest) {
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
 
   try {
@@ -19,7 +18,6 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createClient();
 
-  // 2. Build query — global ideas always included; org-specific added when org exists
   const { searchParams } = new URL(request.url);
   const orgIdParam = searchParams.get('org_id');
 
@@ -28,14 +26,12 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('move_ideas')
-    .select('id, title, category, organization_id, is_global, created_at')
-    .order('title', { ascending: true });
+    .select('id, name, purpose, methods, types, organization_id, is_global, created_at')
+    .order('name', { ascending: true });
 
   if (organizationId) {
-    // Return global ideas OR ideas belonging to this org
     query = query.or(`is_global.eq.true,organization_id.eq.${organizationId}`);
   } else {
-    // Super admin with no org filter — return only global ideas
     query = query.eq('is_global', true);
   }
 
@@ -50,7 +46,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Authenticate & authorise
   let profile: Awaited<ReturnType<typeof getAuthenticatedUser>>['profile'];
 
   try {
@@ -64,7 +59,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // 2. Parse body
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -72,21 +66,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
 
-  const { title, category } = body;
+  // Accept 'name' or legacy 'title'
+  const name = ((body.name ?? body.title) as string | undefined)?.trim();
+  if (!name || name.length === 0) {
+    return NextResponse.json({ error: 'name is required' }, { status: 422 });
+  }
+  if (name.length > 150) {
+    return NextResponse.json({ error: 'name must be 150 characters or fewer' }, { status: 422 });
+  }
 
-  if (!title || typeof title !== 'string' || title.trim() === '') {
-    return NextResponse.json({ error: 'title is required' }, { status: 422 });
-  }
-  if (title.trim().length > 150) {
-    return NextResponse.json({ error: 'title must be 150 characters or fewer' }, { status: 422 });
-  }
-  if (!category || typeof category !== 'string' || category.trim() === '') {
-    return NextResponse.json({ error: 'category is required' }, { status: 422 });
-  }
+  // purpose: accept string or array
+  const purposeRaw = body.purpose ?? body.category;
+  const purpose: string[] = Array.isArray(purposeRaw)
+    ? purposeRaw as string[]
+    : purposeRaw
+    ? [String(purposeRaw)]
+    : [];
+
+  const methods: string[] = Array.isArray(body.methods) ? body.methods as string[] : [];
+  const types: string[] = Array.isArray(body.types) ? body.types as string[] : [];
 
   const supabase = await createClient();
 
-  // 3. Determine is_global / organization_id based on role
   const isGlobal = profile.role === 'super_admin';
   const organizationId = profile.role === 'org_admin' ? profile.organization_id : null;
 
@@ -100,11 +101,13 @@ export async function POST(request: NextRequest) {
   const { data: moveIdea, error } = await supabase
     .from('move_ideas')
     .insert({
-      title: title.trim(),
-      category: category.trim(),
+      name,
+      purpose,
+      methods,
+      types,
       is_global: isGlobal,
       organization_id: organizationId,
-    })
+    } as never)
     .select()
     .single();
 
