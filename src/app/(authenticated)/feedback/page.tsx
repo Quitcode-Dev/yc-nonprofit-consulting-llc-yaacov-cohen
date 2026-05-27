@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Skeleton } from "@/components/ui/skeleton"
+import { DataTable, DataTableColumn } from "@/components/ui/data-table"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -275,6 +275,47 @@ export default function FeedbackInboxPage() {
     setPage(1)
   }
 
+  // ── Column definitions ─────────────────────────────────────────────────────
+  const columns: DataTableColumn<FeedbackRow>[] = useMemo(
+    () => [
+      {
+        key: "title",
+        header: "Title",
+        cellClassName: "font-medium max-w-[240px] truncate",
+        render: (row) => row.title,
+      },
+      {
+        key: "category",
+        header: "Category",
+        render: (row) => <CategoryBadge category={row.category} />,
+      },
+      {
+        key: "submitter",
+        header: "Submitted By",
+        cellClassName: "text-muted-foreground",
+        render: (row) => submitterName(row),
+      },
+      {
+        key: "organization",
+        header: "Organization",
+        cellClassName: "text-muted-foreground",
+        render: (row) => row.organizations?.name ?? "—",
+      },
+      {
+        key: "date",
+        header: "Date",
+        cellClassName: "text-muted-foreground whitespace-nowrap",
+        render: (row) => formatDate(row.created_at),
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (row) => <StatusBadge status={row.status} />,
+      },
+    ],
+    []
+  )
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 space-y-6">
@@ -385,79 +426,15 @@ export default function FeedbackInboxPage() {
       {/* Table */}
       <div className="rounded-lg border bg-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Title
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Category
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Submitted By
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Organization
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Date
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <tr key={i} className="border-b">
-                    {Array.from({ length: 6 }).map((_, j) => (
-                      <td key={j} className="px-4 py-3">
-                        <Skeleton className="h-4 w-full" />
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-12 text-center text-muted-foreground"
-                  >
-                    No feedback found.
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className="border-b hover:bg-muted/40 cursor-pointer transition-colors"
-                    onClick={() => handleRowClick(row)}
-                  >
-                    <td className="px-4 py-3 font-medium max-w-[240px] truncate">
-                      {row.title}
-                    </td>
-                    <td className="px-4 py-3">
-                      <CategoryBadge category={row.category} />
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {submitterName(row)}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {row.organizations?.name ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                      {formatDate(row.created_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={row.status} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <DataTable<FeedbackRow>
+            columns={columns}
+            data={rows}
+            loading={loading}
+            loadingRowCount={8}
+            emptyMessage="No feedback found."
+            onRowClick={handleRowClick}
+            rowKey={(row) => row.id}
+          />
         </div>
 
         {/* Pagination */}

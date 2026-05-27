@@ -328,11 +328,11 @@ export default function IntegrationsSettingsPage() {
             The last 10 import and sync results for your organization.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {orgId ? (
             <ImportHistory orgId={orgId} />
           ) : (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <p className="text-sm text-muted-foreground p-6">Loading…</p>
           )}
         </CardContent>
       </Card>

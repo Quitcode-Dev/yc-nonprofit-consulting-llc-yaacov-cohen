@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { DataTable, DataTableColumn } from '@/components/ui/data-table';
 import type { Donor, Move, ScoringConfig, TierConfig } from '@/lib/types';
 
 // ── Local types ──────────────────────────────────────────────────────────────
@@ -179,6 +180,26 @@ export default function DonorProfilePage() {
   // Score breakdown: enabled configs where the donor's field is true
   const scoreBreakdown = scoringConfigs.filter(
     (c) => c.is_enabled && Boolean(donor[c.field_name as keyof Donor])
+  );
+
+  // Donation table columns
+  const donationColumns: DataTableColumn<Donation>[] = useMemo(
+    () => [
+      {
+        key: 'date',
+        header: 'Date',
+        cellClassName: 'text-muted-foreground',
+        render: (d) => new Date(d.date).toLocaleDateString(),
+      },
+      {
+        key: 'amount',
+        header: 'Amount',
+        cellClassName: 'font-medium text-right',
+        headerClassName: 'text-right',
+        render: (d) => `$${d.amount.toLocaleString()}`,
+      },
+    ],
+    []
   );
 
   // Build move tree: top-level moves (no parent) and children
@@ -377,26 +398,14 @@ export default function DonorProfilePage() {
             <CardHeader>
               <CardTitle>Donation History</CardTitle>
             </CardHeader>
-            <CardContent>
-              {donations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No donations recorded</p>
-              ) : (
-                <ul className="space-y-2">
-                  {donations.map((d) => (
-                    <li
-                      key={d.id}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span className="text-muted-foreground">
-                        {new Date(d.date).toLocaleDateString()}
-                      </span>
-                      <span className="font-medium">
-                        ${d.amount.toLocaleString()}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+            <CardContent className="p-0">
+              <DataTable<Donation>
+                columns={donationColumns}
+                data={donations}
+                loading={false}
+                emptyMessage="No donations recorded"
+                rowKey={(d) => d.id}
+              />
             </CardContent>
           </Card>
         </div>

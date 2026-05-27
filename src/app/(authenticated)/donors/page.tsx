@@ -1,15 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ChevronUp, ChevronDown, ChevronsUpDown, X } from 'lucide-react';
+import { DataTable, DataTableColumn } from '@/components/ui/data-table';
 
 interface Solicitor {
   id: string;
@@ -147,6 +140,65 @@ export default function DonorListPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
+  const columns: DataTableColumn<Donor>[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        header: (
+          <>
+            Name <SortIcon field="name" sort={sort} order={order} />
+          </>
+        ),
+        onHeaderClick: () => handleSort('name'),
+        cellClassName: 'font-medium',
+        render: (donor) => `${donor.first_name} ${donor.last_name}`,
+      },
+      {
+        key: 'email',
+        header: 'Email',
+        cellClassName: 'text-muted-foreground',
+        render: (donor) => donor.email ?? '—',
+      },
+      {
+        key: 'score',
+        header: (
+          <>
+            Score <SortIcon field="score" sort={sort} order={order} />
+          </>
+        ),
+        onHeaderClick: () => handleSort('score'),
+        render: (donor) => donor.score,
+      },
+      {
+        key: 'tier',
+        header: (
+          <>
+            Tier <SortIcon field="tier" sort={sort} order={order} />
+          </>
+        ),
+        onHeaderClick: () => handleSort('tier'),
+        render: (donor) =>
+          donor.tier ? (
+            <Badge className={tierBadgeClass(donor.tier)}>{donor.tier}</Badge>
+          ) : (
+            <span className="text-muted-foreground text-sm">—</span>
+          ),
+      },
+      {
+        key: 'solicitor',
+        header: 'Solicitor',
+        render: (donor) =>
+          donor.solicitor ? (
+            `${donor.solicitor.first_name} ${donor.solicitor.last_name}`
+          ) : (
+            <span className="text-muted-foreground">Unassigned</span>
+          ),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sort, order]
+  );
+
   return (
     <div className="container mx-auto py-6 space-y-4">
       <h1 className="text-2xl font-bold">Donors</h1>
@@ -200,77 +252,15 @@ export default function DonorListPage() {
         </CardHeader>
 
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead
-                  className="cursor-pointer select-none"
-                  onClick={() => handleSort('name')}
-                >
-                  Name <SortIcon field="name" sort={sort} order={order} />
-                </TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead
-                  className="cursor-pointer select-none"
-                  onClick={() => handleSort('score')}
-                >
-                  Score <SortIcon field="score" sort={sort} order={order} />
-                </TableHead>
-                <TableHead
-                  className="cursor-pointer select-none"
-                  onClick={() => handleSort('tier')}
-                >
-                  Tier <SortIcon field="tier" sort={sort} order={order} />
-                </TableHead>
-                <TableHead>Solicitor</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
-                    Loading donors…
-                  </TableCell>
-                </TableRow>
-              ) : donors.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
-                    No donors found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                donors.map((donor) => (
-                  <TableRow
-                    key={donor.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/donors/${donor.id}`)}
-                  >
-                    <TableCell className="font-medium">
-                      {donor.first_name} {donor.last_name}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {donor.email ?? '—'}
-                    </TableCell>
-                    <TableCell>{donor.score}</TableCell>
-                    <TableCell>
-                      {donor.tier ? (
-                        <Badge className={tierBadgeClass(donor.tier)}>{donor.tier}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {donor.solicitor ? (
-                        `${donor.solicitor.first_name} ${donor.solicitor.last_name}`
-                      ) : (
-                        <span className="text-muted-foreground">Unassigned</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <DataTable<Donor>
+            columns={columns}
+            data={donors}
+            loading={loading}
+            loadingRowCount={5}
+            emptyMessage="No donors found."
+            onRowClick={(donor) => router.push(`/donors/${donor.id}`)}
+            rowKey={(donor) => donor.id}
+          />
         </CardContent>
       </Card>
 

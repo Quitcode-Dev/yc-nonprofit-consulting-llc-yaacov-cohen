@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Skeleton } from '@/components/ui/skeleton';
+import { DataTable, DataTableColumn } from '@/components/ui/data-table';
 
 interface ImportLog {
   id: string;
@@ -38,93 +37,38 @@ function ImportTypeBadge({ type }: { type: ImportLog['import_type'] }) {
   );
 }
 
-function ImportLogRow({ log }: { log: ImportLog }) {
-  const [open, setOpen] = useState(false);
+function ErrorDetails({ log }: { log: ImportLog }) {
   const hasErrors = log.error_count > 0 && log.errors && log.errors.length > 0;
 
+  if (!hasErrors) {
+    return (
+      <p className="text-sm text-muted-foreground italic py-2">No errors recorded.</p>
+    );
+  }
+
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <button
-          className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors flex items-center gap-3 group"
-          aria-expanded={open}
-        >
-          {/* Expand icon */}
-          <span className="text-muted-foreground shrink-0">
-            {open ? (
-              <ChevronDown className="h-4 w-4" />
-            ) : (
-              <ChevronRight className="h-4 w-4" />
-            )}
-          </span>
-
-          {/* Type badge */}
-          <span className="shrink-0">
-            <ImportTypeBadge type={log.import_type} />
-          </span>
-
-          {/* Timestamp */}
-          <span className="text-sm text-muted-foreground shrink-0 w-40">
-            {format(new Date(log.created_at), 'MMM d, yyyy h:mm a')}
-          </span>
-
-          {/* Counts */}
-          <span className="flex gap-4 text-sm flex-1">
-            <span>
-              <span className="text-green-600 font-medium">{log.records_created.toLocaleString()}</span>
-              <span className="text-muted-foreground ml-1">created</span>
-            </span>
-            <span>
-              <span className="text-blue-600 font-medium">{log.records_updated.toLocaleString()}</span>
-              <span className="text-muted-foreground ml-1">updated</span>
-            </span>
-            <span>
-              <span className="text-muted-foreground font-medium">{log.records_skipped.toLocaleString()}</span>
-              <span className="text-muted-foreground ml-1">skipped</span>
-            </span>
-          </span>
-
-          {/* Error count */}
-          {log.error_count > 0 && (
-            <span className="flex items-center gap-1 text-sm text-destructive shrink-0">
-              <AlertCircle className="h-3.5 w-3.5" />
-              {log.error_count} {log.error_count === 1 ? 'error' : 'errors'}
-            </span>
-          )}
-        </button>
-      </CollapsibleTrigger>
-
-      <CollapsibleContent>
-        <div className="px-11 pb-4 pt-1">
-          {hasErrors ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-1.5">
-              <p className="text-xs font-semibold text-destructive uppercase tracking-wide mb-2">
-                Error Details
-              </p>
-              {(log.errors as Array<{ row?: number; message?: string } | string>).map(
-                (err, i) => {
-                  const message =
-                    typeof err === 'string'
-                      ? err
-                      : err?.message ?? JSON.stringify(err);
-                  const row = typeof err === 'object' && err !== null && 'row' in err ? err.row : undefined;
-                  return (
-                    <p key={i} className="text-sm text-destructive">
-                      {row !== undefined && (
-                        <span className="font-medium">Row {row}: </span>
-                      )}
-                      {message}
-                    </p>
-                  );
-                }
+    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-1.5 my-2">
+      <p className="text-xs font-semibold text-destructive uppercase tracking-wide mb-2">
+        Error Details
+      </p>
+      {(log.errors as Array<{ row?: number; message?: string } | string>).map(
+        (err, i) => {
+          const message =
+            typeof err === 'string'
+              ? err
+              : err?.message ?? JSON.stringify(err);
+          const row = typeof err === 'object' && err !== null && 'row' in err ? err.row : undefined;
+          return (
+            <p key={i} className="text-sm text-destructive">
+              {row !== undefined && (
+                <span className="font-medium">Row {row}: </span>
               )}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground italic">No errors recorded.</p>
-          )}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+              {message}
+            </p>
+          );
+        }
+      )}
+    </div>
   );
 }
 
@@ -132,6 +76,7 @@ export function ImportHistory({ orgId }: ImportHistoryProps) {
   const [logs, setLogs] = useState<ImportLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -156,15 +101,83 @@ export function ImportHistory({ orgId }: ImportHistoryProps) {
     fetchLogs();
   }, [fetchLogs]);
 
-  if (loading) {
-    return (
-      <div className="space-y-2">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full rounded-md" />
-        ))}
-      </div>
-    );
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }
+
+  const columns: DataTableColumn<ImportLog>[] = useMemo(
+    () => [
+      {
+        key: 'expand',
+        header: '',
+        headerClassName: 'w-8',
+        cellClassName: 'text-muted-foreground',
+        render: (log) =>
+          expandedIds.has(log.id) ? (
+            <ChevronDown className="h-4 w-4" />
+          ) : (
+            <ChevronRight className="h-4 w-4" />
+          ),
+      },
+      {
+        key: 'type',
+        header: 'Type',
+        render: (log) => <ImportTypeBadge type={log.import_type} />,
+      },
+      {
+        key: 'date',
+        header: 'Date',
+        cellClassName: 'text-muted-foreground whitespace-nowrap',
+        render: (log) => format(new Date(log.created_at), 'MMM d, yyyy h:mm a'),
+      },
+      {
+        key: 'created',
+        header: 'Created',
+        render: (log) => (
+          <span>
+            <span className="text-green-600 font-medium">{log.records_created.toLocaleString()}</span>
+          </span>
+        ),
+      },
+      {
+        key: 'updated',
+        header: 'Updated',
+        render: (log) => (
+          <span>
+            <span className="text-blue-600 font-medium">{log.records_updated.toLocaleString()}</span>
+          </span>
+        ),
+      },
+      {
+        key: 'skipped',
+        header: 'Skipped',
+        cellClassName: 'text-muted-foreground',
+        render: (log) => log.records_skipped.toLocaleString(),
+      },
+      {
+        key: 'errors',
+        header: 'Errors',
+        render: (log) =>
+          log.error_count > 0 ? (
+            <span className="flex items-center gap-1 text-sm text-destructive">
+              <AlertCircle className="h-3.5 w-3.5" />
+              {log.error_count}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">0</span>
+          ),
+      },
+    ],
+    [expandedIds]
+  );
 
   if (error) {
     return (
@@ -175,17 +188,18 @@ export function ImportHistory({ orgId }: ImportHistoryProps) {
     );
   }
 
-  if (logs.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground italic">No imports yet.</p>
-    );
-  }
-
   return (
-    <div className="divide-y rounded-md border">
-      {logs.map((log) => (
-        <ImportLogRow key={log.id} log={log} />
-      ))}
-    </div>
+    <DataTable<ImportLog>
+      columns={columns}
+      data={logs}
+      loading={loading}
+      loadingRowCount={3}
+      emptyMessage="No imports yet."
+      onRowClick={(log) => toggleExpanded(log.id)}
+      rowKey={(log) => log.id}
+      renderExpandedRow={(log) =>
+        expandedIds.has(log.id) ? <ErrorDetails log={log} /> : null
+      }
+    />
   );
 }
