@@ -43,6 +43,8 @@ export interface DataTableProps<T> {
   rowKey?: (row: T, rowIndex: number) => string | number
   /** Optional additional className for the row */
   rowClassName?: (row: T, rowIndex: number) => string
+  /** Optional render function for an expanded detail row beneath each data row */
+  renderExpandedRow?: (row: T, rowIndex: number) => React.ReactNode | null
 }
 
 export function DataTable<T>({
@@ -54,6 +56,7 @@ export function DataTable<T>({
   onRowClick,
   rowKey,
   rowClassName,
+  renderExpandedRow,
 }: DataTableProps<T>) {
   return (
     <Table>
@@ -101,28 +104,40 @@ export function DataTable<T>({
             const key = rowKey ? rowKey(row, rowIndex) : rowIndex
             const extraClass = rowClassName ? rowClassName(row, rowIndex) : ""
             return (
-              <TableRow
-                key={key}
-                className={[
-                  "border-b hover:bg-muted/50 transition-colors",
-                  onRowClick ? "cursor-pointer" : "",
-                  extraClass,
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={onRowClick ? () => onRowClick(row, rowIndex) : undefined}
-              >
-                {columns.map((col) => (
-                  <TableCell
-                    key={col.key}
-                    className={["px-4 py-3", col.cellClassName ?? ""]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    {col.render(row, rowIndex)}
-                  </TableCell>
-                ))}
-              </TableRow>
+              <React.Fragment key={key}>
+                <TableRow
+                  className={[
+                    "border-b hover:bg-muted/50 transition-colors",
+                    onRowClick ? "cursor-pointer" : "",
+                    extraClass,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={onRowClick ? () => onRowClick(row, rowIndex) : undefined}
+                >
+                  {columns.map((col) => (
+                    <TableCell
+                      key={col.key}
+                      className={["px-4 py-3", col.cellClassName ?? ""]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      {col.render(row, rowIndex)}
+                    </TableCell>
+                  ))}
+                </TableRow>
+                {renderExpandedRow && (() => {
+                  const expanded = renderExpandedRow(row, rowIndex)
+                  if (!expanded) return null
+                  return (
+                    <TableRow className="border-b">
+                      <TableCell colSpan={columns.length} className="px-4 py-0">
+                        {expanded}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })()}
+              </React.Fragment>
             )
           })
         )}

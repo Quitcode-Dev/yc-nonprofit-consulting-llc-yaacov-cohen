@@ -1,14 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { useEffect, useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { MoreHorizontal } from 'lucide-react';
+import { DataTable, DataTableColumn } from '@/components/ui/data-table';
 
 interface SolicitorRow {
   id: string;
@@ -47,7 +40,7 @@ interface InvitationRow {
   kind: 'invitation';
 }
 
-type TableRow = SolicitorRow | InvitationRow;
+type UserTableRow = SolicitorRow | InvitationRow;
 
 function formatName(first: string | null, last: string | null): string {
   const parts = [first, last].filter(Boolean);
@@ -64,7 +57,7 @@ function formatDate(iso: string): string {
 
 export default function UserManagementPage() {
   const [orgId, setOrgId] = useState<string | null>(null);
-  const [rows, setRows] = useState<TableRow[]>([]);
+  const [rows, setRows] = useState<UserTableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,7 +113,7 @@ export default function UserManagementPage() {
         }));
 
         // Sort by created_at descending
-        const combined: TableRow[] = [...solicitorRows, ...invitationRows].sort(
+        const combined: UserTableRow[] = [...solicitorRows, ...invitationRows].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         setRows(combined);
@@ -218,7 +211,7 @@ export default function UserManagementPage() {
     }
   }
 
-  function getStatusBadge(row: TableRow) {
+  function getStatusBadge(row: UserTableRow) {
     if (row.kind === 'invitation') {
       return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Invited</Badge>;
     }
@@ -227,6 +220,53 @@ export default function UserManagementPage() {
     }
     return <Badge variant="destructive">Inactive</Badge>;
   }
+
+  const columns: DataTableColumn<UserTableRow>[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        header: 'Name',
+        render: (row) => formatName(row.first_name, row.last_name),
+      },
+      {
+        key: 'email',
+        header: 'Email',
+        render: (row) => row.email,
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (row) => getStatusBadge(row),
+      },
+      {
+        key: 'date',
+        header: 'Date Added',
+        render: (row) => formatDate(row.created_at),
+      },
+      {
+        key: 'actions',
+        header: '',
+        headerClassName: 'w-10',
+        render: (row) =>
+          row.kind === 'solicitor' ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">Open menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleToggleActive(row)}>
+                  {row.is_active ? 'Deactivate' : 'Reactivate'}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null,
+      },
+    ],
+    []
+  );
 
   return (
     <div className="p-6 space-y-6">
@@ -239,55 +279,16 @@ export default function UserManagementPage() {
         <div className="rounded-md bg-destructive/10 p-4 text-sm text-destructive">{error}</div>
       )}
 
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Date Added</TableHead>
-              <TableHead className="w-10" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
-                  No solicitors yet.
-                </TableCell>
-              </TableRow>
-            )}
-            {rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>{formatName(row.first_name, row.last_name)}</TableCell>
-                <TableCell>{row.email}</TableCell>
-                <TableCell>{getStatusBadge(row)}</TableCell>
-                <TableCell>{formatDate(row.created_at)}</TableCell>
-                <TableCell>
-                  {row.kind === 'solicitor' && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleToggleActive(row)}>
-                          {row.is_active ? 'Deactivate' : 'Reactivate'}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
+      <div className="rounded-md border">
+        <DataTable<UserTableRow>
+          columns={columns}
+          data={rows}
+          loading={loading}
+          loadingRowCount={5}
+          emptyMessage="No solicitors yet."
+          rowKey={(row) => row.id}
+        />
+      </div>
 
       {/* Invite Dialog */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
